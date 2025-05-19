@@ -46,6 +46,7 @@ jobs:
           j2 config.yaml -o config.yaml
 
           REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/${APP}
+          EXPOSE_PORT=$(yq -e ".environments.${{ inputs.ENVIRONMENT }}.microservice.expose_port // 80" config.yaml)
           CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
           MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
           REPLICA=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.replicas // 1" config.yaml)
@@ -63,6 +64,7 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "CLUSTER=$CLUSTER" >> $GITHUB_ENV
           echo "REPLICA=$REPLICA" >> $GITHUB_ENV
+          echo "EXPOSE_PORT=$EXPOSE_PORT" >> GITHUB_ENV
 
       - name: Upgrade ECS Task Definition
         run: |
@@ -71,6 +73,7 @@ jobs:
           [ -n "$CPU" ] && jq --argjson cpu ${CPU} '.containerDefinitions[0].cpu=$cpu' task-definition.json | sponge task-definition.json
           [ -n "$MEM" ] && jq --argjson mem ${MEM} '.containerDefinitions[0].memory=$mem' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
+          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort = $port|.containerDefinitions[0].portMappings[0].hostPort = $port' task-definition.json | sponge task-definition.jso
 
           aws ecs register-task-definition --cli-input-json file://task-definition.json
           TASK=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --query "taskDefinition.taskDefinitionArn" --output text|cut -d'/' -f2)
