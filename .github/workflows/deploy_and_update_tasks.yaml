@@ -16,7 +16,7 @@ on:
 jobs:
   action-deploy-upgrade-ms:
     runs-on: ubuntu-latest
-    environment: dev
+    environment: ${{ inputs.ENVIRONMENT }}
 
     permissions:
       id-token: write
@@ -30,8 +30,8 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           audience: sts.amazonaws.com
-          aws-region: 'useast-1'
-          role-to-assume: 'arn:aws:iam::199920436475:role/GitHub'
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
 
       - name: Setup CI/CD ECS Task Definition
         id: config
