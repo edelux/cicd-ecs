@@ -1,0 +1,81 @@
+---
+name: ECS Microservices Task Update
+run-name: MS Task Update
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        required: false
+        type: string
+        default: config.yaml
+      ENVIRONMENT:
+        required: true
+        type: string
+
+jobs:
+  action-deploy-upgrade-ms:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.ENVIRONMENT }}
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          audience: sts.amazonaws.com
+          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+
+      - name: Setup CI/CD ECS Task Definition
+        id: config
+        run: |
+          sudo apt update -qq >/dev/null 2>&1 && \
+          DEBIAN_FRONTEND=noninteractive sudo apt upgrade -y >/dev/null 2>&1 && \
+          DEBIAN_FRONTEND=noninteractive sudo apt install -y j2cli gettext moreutils >/dev/null 2>&1
+
+          export APP=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.APP // \"\"" config.yaml)
+          export VERSION=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.VERSION // \"\"" config.yaml)
+
+          j2 config.yaml -o config.yaml
+
+          REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/${APP}
+          CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
+          MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
+          REPLICA=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.replicas // 1" config.yaml)
+          CLUSTER=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cluster // \"\"" config.yaml)
+
+          if [ -z "$APP" ] || [ -z "$VERSION" ]; then
+            echo "❌ ERROR: APP and/or VERSION are not defined in config.yaml for environment ${{ env.ENVIRONMENT }}"
+            exit 1
+          fi
+
+          echo "APP=$APP" >> $GITHUB_ENV
+          echo "CPU=$CPU" >> $GITHUB_ENV
+          echo "MEM=$MEM" >> $GITHUB_ENV
+          echo "REPO=$REPO" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "CLUSTER=$CLUSTER" >> $GITHUB_ENV
+          echo "REPLICA=$REPLICA" >> $GITHUB_ENV
+
+      - name: Upgrade ECS Task Definition
+        run: |
+          aws ecs describe-task-definition --task-definition ${APP} --query "taskDefinition" --output json >task-definition.json
+          jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task-definition.json | sponge task-definition.json
+          [ -n "$CPU" ] && jq --argjson cpu ${CPU} '.containerDefinitions[0].cpu=$cpu' task-definition.json | sponge task-definition.json
+          [ -n "$MEM" ] && jq --argjson mem ${MEM} '.containerDefinitions[0].memory=$mem' task-definition.json | sponge task-definition.json
+          jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
+
+          aws ecs register-task-definition --cli-input-json file://task-definition.json
+          TASK=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --query "taskDefinition.taskDefinitionArn" --output text|cut -d'/' -f2)
+          aws ecs update-service --cluster ${CLUSTER} --service ${APP} --task-definition ${TASK} --desired-count ${REPLICA}
+
+      - name: Debug task definition
+        run: jq '.containerDefinitions[0]' task-definition.json
+...
