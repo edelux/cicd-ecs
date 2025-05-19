@@ -46,7 +46,7 @@ jobs:
           j2 config.yaml -o config.yaml
 
           REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/${APP}
-          EXPOSE_PORT=$(yq -e ".environments.${{ inputs.ENVIRONMENT }}.microservice.expose_port // 80" config.yaml)
+          EXPOSE_PORT=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.expose_port // 80" config.yaml)
           CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
           MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
           REPLICA=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.replicas // 1" config.yaml)
