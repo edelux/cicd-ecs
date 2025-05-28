@@ -37,7 +37,6 @@ jobs:
         id: config
         run: |
           sudo apt update -qq >/dev/null 2>&1 && \
-          DEBIAN_FRONTEND=noninteractive sudo apt upgrade -y >/dev/null 2>&1 && \
           DEBIAN_FRONTEND=noninteractive sudo apt install -y j2cli gettext moreutils >/dev/null 2>&1
 
           export APP=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.APP // \"\"" config.yaml)
