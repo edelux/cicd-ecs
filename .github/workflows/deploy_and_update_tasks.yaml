@@ -42,7 +42,7 @@ jobs:
           export APP=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.APP // \"\"" config.yaml)
           export VERSION=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.VERSION // \"\"" config.yaml)
 
-          j2 config.yaml -o config.yaml
+          chronic j2 config.yaml -o config.yaml
 
           REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/${APP}
           EXPOSE_PORT=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.expose_port // 80" config.yaml)
