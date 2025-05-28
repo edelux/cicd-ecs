@@ -72,8 +72,19 @@ jobs:
           [ -n "$CPU" ] && jq --argjson cpu ${CPU} '.containerDefinitions[0].cpu=$cpu' task-definition.json | sponge task-definition.json
           [ -n "$MEM" ] && jq --argjson mem ${MEM} '.containerDefinitions[0].memory=$mem' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
-          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort = $port|.containerDefinitions[0].portMappings[0].hostPort = $port' task-definition.json | sponge task-definition.jso
+          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort = $port|.containerDefinitions[0].portMappings[0].hostPort = $port' task-definition.json | sponge task-definition.json
 
+          ## Variables
+          yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
+          jq -e type /tmp/variables.json >/dev/null 2>&1 && jq --argfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key, value:.value}))' task-definition.json | sponge task-definition.json
+          rm -f /tmp/variables.json
+
+          ## Secrets
+          yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
+          jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile env /tmp/secrets.json --argfile secs /tmp/secrets.json '.containerDefinitions[0].environment=($env|to_entries|map({name:.key, value:.value}))|.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key, valueFrom:.value}))' task-definition.json | sponge task-definition.json
+          rm -f /tmp/secrets.json
+
+          ## Deploy
           aws ecs register-task-definition --cli-input-json file://task-definition.json
           TASK=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --query "taskDefinition.taskDefinitionArn" --output text|cut -d'/' -f2)
           aws ecs update-service --cluster ${CLUSTER} --service ${APP} --task-definition ${TASK} --desired-count ${REPLICA}
