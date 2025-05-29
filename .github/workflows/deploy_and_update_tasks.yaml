@@ -77,16 +77,18 @@ jobs:
           ## Variables
           yq -o=json -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json  
           if [ -s /tmp/variables.json ] && jq -e type /tmp/variables.json >/dev/null 2>&1; then
-            jq --slurpfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key,value:.value}))' task-definition.json | sponge task-definition.json
+            jq 'if type=="array" then . else to_entries end | map({name: .key, value: .value})' /tmp/variables.json >/tmp/variables_array.json
+            jq --slurpfile vars /tmp/variables_array.json '.containerDefinitions[0].environment=$vars[0]' task-definition.json | sponge task-definition.json
           fi
-          rm -f /tmp/variables.json
+          rm -f /tmp/variables.json /tmp/variables_array.json
 
           ## Secrets
           yq -o=json -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
           if [ -s /tmp/secrets.json ] && jq -e type /tmp/secrets.json >/dev/null 2>&1; then
-            jq --slurpfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key,valueFrom:.value}))' task-definition.json | sponge task-definition.json
+            jq 'if type=="array" then . else to_entries end | map({name: .key, valueFrom: .value})' /tmp/secrets.json >/tmp/secrets_array.json
+            jq --slurpfile secs /tmp/secrets_array.json '.containerDefinitions[0].secrets=$secs[0]' task-definition.json | sponge task-definition.json
           fi
-          rm -f /tmp/secrets.json
+          rm -f /tmp/secrets.json /tmp/secrets_array.json
 
           ## Deploy
           aws ecs register-task-definition --cli-input-json file://task-definition.json --output json
