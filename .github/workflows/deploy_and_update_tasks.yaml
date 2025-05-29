@@ -44,7 +44,7 @@ jobs:
 
           chronic j2 config.yaml -o config.yaml
 
-          REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/${APP}
+          REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/$APP
           EXPOSE_PORT=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.expose_port // 80" config.yaml)
           CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
           MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
@@ -69,25 +69,25 @@ jobs:
         run: |
           aws ecs describe-task-definition --task-definition ${APP} --query "taskDefinition" --output json >task-definition.json
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task-definition.json | sponge task-definition.json
-          [ -n "$CPU" ] && jq --argjson cpu ${CPU} '.containerDefinitions[0].cpu=$cpu' task-definition.json | sponge task-definition.json
-          [ -n "$MEM" ] && jq --argjson mem ${MEM} '.containerDefinitions[0].memory=$mem' task-definition.json | sponge task-definition.json
+          jq --argjson cpu "$CPU" '.containerDefinitions[0].cpu=($cpu|tonumber)' task-definition.json | sponge task-definition.json
+          jq --argjson mem "$MEM" '.containerDefinitions[0].memory=($mem|tonumber)' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
-          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort=$port|.containerDefinitions[0].portMappings[0].hostPort=$port' task-definition.json | sponge task-definition.json
+          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort=$port|.containerDefinitions[0].portMappings[0].hostPort=($port|tonumber)' task-definition.json | sponge task-definition.json
 
           ## Variables
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
-          jq -e type /tmp/variables.json >/dev/null 2>&1 && jq --argfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key, value:.value}))' task-definition.json | sponge task-definition.json
+          jq -e type /tmp/variables.json >/dev/null 2>&1 && jq --argfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key,value:.value}))' task-definition.json | sponge task-definition.json
           rm -f /tmp/variables.json
 
           ## Secrets
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
-          jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key, valueFrom:.value}))' task-definition.json | sponge task-definition.json
+          jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key,valueFrom:.value}))' task-definition.json | sponge task-definition.json
           rm -f /tmp/secrets.json
 
           ## Deploy
-          aws ecs register-task-definition --cli-input-json file://task-definition.json
+          aws ecs register-task-definition --cli-input-json file://task-definition.json --output json
           TASK=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --query "taskDefinition.taskDefinitionArn" --output text|cut -d'/' -f2)
-          aws ecs update-service --cluster ${CLUSTER} --service ${APP} --task-definition ${TASK} --desired-count ${REPLICA}
+          aws ecs update-service --cluster "$CLUSTER" --service "$APP" --task-definition "$TASK" --desired-count "$REPLICA" --output json
 
       - name: Debug task definition
         run: jq '.containerDefinitions[0]' task-definition.json
