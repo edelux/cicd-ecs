@@ -45,7 +45,6 @@ jobs:
           chronic j2 config.yaml -o config.yaml
 
           REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/$APP
-          EXPOSE_PORT=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.expose_port // 80" config.yaml)
           CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
           MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
           REPLICA=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.replicas // 1" config.yaml)
@@ -63,18 +62,17 @@ jobs:
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "CLUSTER=$CLUSTER" >> $GITHUB_ENV
           echo "REPLICA=$REPLICA" >> $GITHUB_ENV
-          echo "EXPOSE_PORT=$EXPOSE_PORT" >> GITHUB_ENV
 
       - name: Upgrade ECS Task Definition
         run: |
           set -euo pipefail
+          : "${EXPOSE_PORT:=80}"
           echo "$APP $CPU $MEM $REPO $VERSION $CLUSTER $REPLICA $EXPOSE_PORT"
           aws ecs describe-task-definition --task-definition "$APP" --query "taskDefinition" --output json >task-definition.json
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task-definition.json | sponge task-definition.json
           jq --argjson cpu "$CPU" '.containerDefinitions[0].cpu=($cpu|tonumber)' task-definition.json | sponge task-definition.json
           jq --argjson mem "$MEM" '.containerDefinitions[0].memory=($mem|tonumber)' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
-          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort=$port|.containerDefinitions[0].portMappings[0].hostPort=($port|tonumber)' task-definition.json | sponge task-definition.json
 
           ## Variables
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
