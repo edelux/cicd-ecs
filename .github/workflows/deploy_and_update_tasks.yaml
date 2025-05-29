@@ -44,7 +44,6 @@ jobs:
 
           chronic j2 config.yaml -o config.yaml
 
-          PORT=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.port // 80" config.yaml)
           REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/$APP
           CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
           MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
@@ -59,7 +58,6 @@ jobs:
           echo "APP=$APP" >> $GITHUB_ENV
           echo "CPU=$CPU" >> $GITHUB_ENV
           echo "MEM=$MEM" >> $GITHUB_ENV
-          echo "PORT=$PORT" >> $GITHUB_ENV
           echo "REPO=$REPO" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "CLUSTER=$CLUSTER" >> $GITHUB_ENV
@@ -71,21 +69,20 @@ jobs:
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task-definition.json | sponge task-definition.json
           jq --argjson cpu "$CPU" '.containerDefinitions[0].cpu=($cpu|tonumber)' task-definition.json | sponge task-definition.json
           jq --argjson mem "$MEM" '.containerDefinitions[0].memory=($mem|tonumber)' task-definition.json | sponge task-definition.json
-          jq --argjson port "$PORT" '.containerDefinitions[0].portMappings |= map(if .name == "http" then .containerPort = $port else . end)' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
 
           ## Variables
-          yq -o=json -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json  
+          yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
           if [ -s /tmp/variables.json ] && jq -e type /tmp/variables.json >/dev/null 2>&1; then
-            jq 'if type=="array" then . else to_entries end | map({name: .key, value: .value})' /tmp/variables.json >/tmp/variables_array.json
+            jq 'if type=="array" then . else to_entries end|map({name:.key,value:.value})' /tmp/variables.json >/tmp/variables_array.json
             jq --slurpfile vars /tmp/variables_array.json '.containerDefinitions[0].environment=$vars[0]' task-definition.json | sponge task-definition.json
           fi
           rm -f /tmp/variables.json /tmp/variables_array.json
 
           ## Secrets
-          yq -o=json -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
+          yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
           if [ -s /tmp/secrets.json ] && jq -e type /tmp/secrets.json >/dev/null 2>&1; then
-            jq 'if type=="array" then . else to_entries end | map({name: .key, valueFrom: .value})' /tmp/secrets.json >/tmp/secrets_array.json
+            jq 'if type=="array" then . else to_entries end|map({name:.key,valueFrom:.value})' /tmp/secrets.json >/tmp/secrets_array.json
             jq --slurpfile secs /tmp/secrets_array.json '.containerDefinitions[0].secrets=$secs[0]' task-definition.json | sponge task-definition.json
           fi
           rm -f /tmp/secrets.json /tmp/secrets_array.json
