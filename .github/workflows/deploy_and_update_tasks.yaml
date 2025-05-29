@@ -81,7 +81,7 @@ jobs:
 
           ## Secrets
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
-          jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile env /tmp/secrets.json --argfile secs /tmp/secrets.json '.containerDefinitions[0].environment=($env|to_entries|map({name:.key, value:.value}))|.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key, valueFrom:.value}))' task-definition.json | sponge task-definition.json
+          jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key, valueFrom:.value}))' task-definition.json | sponge task-definition.json
           rm -f /tmp/secrets.json
 
           ## Deploy
