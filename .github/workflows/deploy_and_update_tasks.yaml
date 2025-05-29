@@ -44,20 +44,22 @@ jobs:
 
           chronic j2 config.yaml -o config.yaml
 
+          PORT=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.port // 80" config.yaml)
           REPO=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.docker.url" config.yaml)/$APP
           CPU=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cpu // 128" config.yaml)
           MEM=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.memory // 128" config.yaml)
           REPLICA=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.replicas // 1" config.yaml)
           CLUSTER=$(yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.cluster // \"\"" config.yaml)
 
-          if [ -z "$APP" ] || [ -z "$VERSION" ]; then
-            echo "❌ ERROR: APP and/or VERSION are not defined in config.yaml for environment ${{ env.ENVIRONMENT }}"
+          if [ -z "$APP" ] || [ -z "$VERSION" ] || [ -z "$CLUSTER" ]; then
+            echo "❌ ERROR: APP and/or VERSION and/or CLUSTER are not defined in config.yaml for environment ${{ env.ENVIRONMENT }}"
             exit 1
           fi
 
           echo "APP=$APP" >> $GITHUB_ENV
           echo "CPU=$CPU" >> $GITHUB_ENV
           echo "MEM=$MEM" >> $GITHUB_ENV
+          echo "PORT=$PORT" >> $GITHUB_ENV
           echo "REPO=$REPO" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "CLUSTER=$CLUSTER" >> $GITHUB_ENV
@@ -69,6 +71,7 @@ jobs:
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task-definition.json | sponge task-definition.json
           jq --argjson cpu "$CPU" '.containerDefinitions[0].cpu=($cpu|tonumber)' task-definition.json | sponge task-definition.json
           jq --argjson mem "$MEM" '.containerDefinitions[0].memory=($mem|tonumber)' task-definition.json | sponge task-definition.json
+          jq --argjson port "$PORT" '.containerDefinitions[0].portMappings[0].containerPort=$port|.containerDefinitions[0].portMappings[0].hostPort=($port|tonumber)' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
 
           ## Variables
