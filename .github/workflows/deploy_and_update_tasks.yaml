@@ -72,7 +72,7 @@ jobs:
           [ -n "$CPU" ] && jq --argjson cpu ${CPU} '.containerDefinitions[0].cpu=$cpu' task-definition.json | sponge task-definition.json
           [ -n "$MEM" ] && jq --argjson mem ${MEM} '.containerDefinitions[0].memory=$mem' task-definition.json | sponge task-definition.json
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
-          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort = $port|.containerDefinitions[0].portMappings[0].hostPort = $port' task-definition.json | sponge task-definition.json
+          jq --argjson port "$EXPOSE_PORT" '.containerDefinitions[0].portMappings[0].containerPort=$port|.containerDefinitions[0].portMappings[0].hostPort=$port' task-definition.json | sponge task-definition.json
 
           ## Variables
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
