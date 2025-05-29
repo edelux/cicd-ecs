@@ -75,13 +75,17 @@ jobs:
           jq --arg repo "$REPO" --arg ver "$VERSION" '.containerDefinitions[0].image=($repo+":"+$ver)' task-definition.json | sponge task-definition.json
 
           ## Variables
-          yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
-          jq -e type /tmp/variables.json >/dev/null 2>&1 && jq --argfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key,value:.value}))' task-definition.json | sponge task-definition.json
+          yq -o=json -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json  
+          if [ -s /tmp/variables.json ] && jq -e type /tmp/variables.json >/dev/null 2>&1; then
+            jq --argfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key,value:.value}))' task-definition.json | sponge task-definition.json
+          fi
           rm -f /tmp/variables.json
 
           ## Secrets
-          yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
-          jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key,valueFrom:.value}))' task-definition.json | sponge task-definition.json
+          yq -o=json -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
+          if [ -s /tmp/secrets.json ] && jq -e type /tmp/secrets.json >/dev/null 2>&1; then
+            jq --argfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key,valueFrom:.value}))' task-definition.json | sponge task-definition.json
+          fi
           rm -f /tmp/secrets.json
 
           ## Deploy
