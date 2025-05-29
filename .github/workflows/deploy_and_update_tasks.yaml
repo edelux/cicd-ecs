@@ -65,9 +65,6 @@ jobs:
 
       - name: Upgrade ECS Task Definition
         run: |
-          set -euo pipefail
-          : "${EXPOSE_PORT:=80}"
-          echo "$APP $CPU $MEM $REPO $VERSION $CLUSTER $REPLICA $EXPOSE_PORT"
           aws ecs describe-task-definition --task-definition "$APP" --query "taskDefinition" --output json >task-definition.json
           jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy)' task-definition.json | sponge task-definition.json
           jq --argjson cpu "$CPU" '.containerDefinitions[0].cpu=($cpu|tonumber)' task-definition.json | sponge task-definition.json
@@ -76,18 +73,15 @@ jobs:
 
           ## Variables
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.variables" config.yaml >/tmp/variables.json
-          cat /tmp/variables.json
           jq -e type /tmp/variables.json >/dev/null 2>&1 && jq --argfile vars /tmp/variables.json '.containerDefinitions[0].environment=($vars|to_entries|map({name:.key,value:.value}))' task-definition.json | sponge task-definition.json
           rm -f /tmp/variables.json
 
           ## Secrets
           yq -r ".environments.${{ inputs.ENVIRONMENT }}.microservice.secrets" config.yaml >/tmp/secrets.json
-          cat /tmp/secrets.json
           jq -e type /tmp/secrets.json >/dev/null 2>&1 && jq --argfile secs /tmp/secrets.json '.containerDefinitions[0].secrets=($secs|to_entries|map({name:.key,valueFrom:.value}))' task-definition.json | sponge task-definition.json
           rm -f /tmp/secrets.json
 
           ## Deploy
-          cat task-definition.json
           aws ecs register-task-definition --cli-input-json file://task-definition.json --output json
           TASK=$(aws ecs register-task-definition --cli-input-json file://task-definition.json --query "taskDefinition.taskDefinitionArn" --output text|cut -d'/' -f2)
           aws ecs update-service --cluster "$CLUSTER" --service "$APP" --task-definition "$TASK" --desired-count "$REPLICA" --output json
